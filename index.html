@@ -60,13 +60,13 @@
     <button class="btn-add" onclick="addManualRoom()">➕ 수동으로 호실 직접 등록하기</button>
   </div>
 
-  <!-- [탭 2] 전체 호실 장부 화면 (공실 알림 & 청소 연계 포함) -->
+  <!-- [탭 2] 전체 호실 장부 화면 -->
   <div id="tabRooms" class="tab-content">
     <div class="card">
       <strong style="font-size: 16px; margin-bottom: 12px; display: block;">🏠 전체 물건 장부 목록</strong>
       <div id="roomListContainer">
         
-        <!-- 샘플 1: 임대 중인 호실 -->
+        <!-- 기본 샘플 1 -->
         <div class="room-item">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div><strong>동삭동 다가구 201호</strong> <span class="tag-type">다가구</span></div>
@@ -75,14 +75,13 @@
           <div style="font-size: 12px; color: #718096; margin-top: 4px;">김두영 | 월세 55만 | 지정일 10일</div>
         </div>
 
-        <!-- 샘플 2: 공실 상태 (공실 알림 + 청소 연계 액션 버튼 제공) -->
+        <!-- 기본 샘플 2 -->
         <div class="room-item">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div><strong>서정동 오피스텔 502호</strong> <span class="tag-type">오피스텔</span></div>
             <span class="badge-vacant">공실</span>
           </div>
           <div style="font-size: 12px; color: #e53e3e; margin-top: 4px;">현재 공실 상태 (세입자 구함 / 케어 필요)</div>
-          
           <div class="action-group">
             <button class="btn-action btn-notify" onclick="notifyVacant()">📢 소장님들께 공실 알리기</button>
             <button class="btn-action btn-clean" onclick="requestCleaning()">🧹 퇴실 청소/수리 신청</button>
@@ -100,29 +99,88 @@
   </div>
 
   <script>
+    // 현재 세대수 및 수입 상태 데이터
+    let currentUnits = 2;
+    let currentVacant = 1;
+    let currentAmount = 550000;
+
     function triggerFileInput() {
       document.getElementById('contractInput').click();
     }
 
+    // 계약서 촬영/스캔 시 실제 화면에 호실 추가 로직
     function processContract(event) {
       if (event.target.files && event.target.files[0]) {
-        alert("📄 계약서 분석 완료!\n\n• 물건: 지제동 아파트 101동 402호\n• 세입자: 홍길동\n• 월세: 700,000원 (매월 15일)");
+        // AI 스캔 모의 결과 데이터 생성
+        const sampleBuildings = [
+          { name: "지제동 아파트 101동 402호", type: "아파트", amount: 700000, payDay: 15, tenant: "홍길동" },
+          { name: "동삭동 다세대 301호", type: "다세대", amount: 600000, payDay: 25, tenant: "이순신" },
+          { name: "고덕 오피스텔 804호", type: "오피스텔", amount: 650000, payDay: 5, tenant: "강감찬" }
+        ];
+        
+        const randomItem = sampleBuildings[Math.floor(Math.random() * sampleBuildings.length)];
+
+        alert(`📄 [AI OCR 계약서 스캔 완료]\n\n• 물건: ${randomItem.name}\n• 세입자: ${randomItem.tenant}\n• 월세: ${randomItem.amount.toLocaleString()}원 (매월 ${randomItem.payDay}일)\n\n장부에 등록되었습니다!`);
+
+        // 1. 숫자의 수금 현황 업데이트
+        currentUnits += 1;
+        currentAmount += randomItem.amount;
+        document.getElementById('totalUnitsText').innerText = `${currentUnits} 세대 (공실 ${currentVacant})`;
+        document.getElementById('totalAmountText').innerText = `${currentAmount.toLocaleString()} 원`;
+
+        // 2. [전체 물건 장부] 목록 상단에 새 호실 카드 즉시 추가
+        const container = document.getElementById('roomListContainer');
+        const newItem = document.createElement('div');
+        newItem.className = 'room-item';
+        newItem.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div><strong>${randomItem.name}</strong> <span class="tag-type">${randomItem.type}</span></div>
+            <span class="badge-paid">완납</span>
+          </div>
+          <div style="font-size: 12px; color: #718096; margin-top: 4px;">${randomItem.tenant} | 월세 ${(randomItem.amount/10000).toLocaleString()}만 | 지정일 ${randomItem.payDay}일</div>
+        `;
+
+        container.insertBefore(newItem, container.firstChild);
+        
+        // 3. 바로 장부 탭으로 전환해서 보여주기
+        switchTab('rooms');
       }
     }
 
-    // 1-Click 공실 알림 시뮬레이션
+    // 수동 호실 직접 추가
+    function addManualRoom() {
+      const name = prompt("건물 및 호실명을 입력하세요 (예: 동삭동 다가구 402호):");
+      if (!name) return;
+      const tenant = prompt("세입자 이름을 입력하세요:", "김철수");
+      const amountInput = prompt("월세 금액(원)을 입력하세요:", "500000");
+      const amount = parseInt(amountInput) || 500000;
+
+      currentUnits += 1;
+      currentAmount += amount;
+      document.getElementById('totalUnitsText').innerText = `${currentUnits} 세대 (공실 ${currentVacant})`;
+      document.getElementById('totalAmountText').innerText = `${currentAmount.toLocaleString()} 원`;
+
+      const container = document.getElementById('roomListContainer');
+      const newItem = document.createElement('div');
+      newItem.className = 'room-item';
+      newItem.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div><strong>${name}</strong> <span class="tag-type">다가구</span></div>
+          <span class="badge-paid">완납</span>
+        </div>
+        <div style="font-size: 12px; color: #718096; margin-top: 4px;">${tenant} | 월세 ${(amount/10000).toLocaleString()}만 | 지정일 10일</div>
+      `;
+      container.insertBefore(newItem, container.firstChild);
+      alert(`${name} 등록이 완료되었습니다!`);
+      switchTab('rooms');
+    }
+
     function notifyVacant() {
       alert("📢 [공실 배포 완료]\n\n평택 서정동/동삭동 인근 제휴 부동산 소장님 12분에게 '서정동 오피스텔 502호' 매물 정보와 조건이 카카오톡으로 일괄 발송되었습니다!");
     }
 
-    // 퇴실 청소/수리 요청 시뮬레이션
     function requestCleaning() {
       alert("🧹 [퇴실 청소/수리 신청]\n\n제휴 청소 업체에 작업 요청이 전달되었습니다.\n작업 완료 후 '청소 전/후 검수 사진'이 본 장부 카드로 자동 연동됩니다.");
-    }
-
-    function addManualRoom() {
-      const name = prompt("건물 및 호실명을 입력하세요:");
-      if (name) alert(`${name} 물건이 등록되었습니다.`);
     }
 
     function switchTab(tab) {
