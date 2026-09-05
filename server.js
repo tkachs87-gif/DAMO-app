@@ -10,45 +10,42 @@ app.use(express.json());
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-// 💡 503 과부하 방지용 재시도 함수
+// 💡 503/429 과부하 대응 재시도 함수
 async function fetchGeminiWithRetry(apiKey, payload, retries = 3) {
-  const models = ['gemini-2.5-flash', 'gemini-1.5-flash']; // 메인 및 백업 모델
+  // 현재 가용 가능한 무료 모델 주소
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
   let lastError;
 
-  for (const model of models) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
 
-    for (let i = 0; i < retries; i++) {
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
+      const resultData = await response.json();
 
-        const resultData = await response.json();
-
-        if (response.ok) {
-          return resultData;
-        }
-
-        // 503(과부하) 또는 429(요청 과다)일 경우 1초 대기 후 재시도
-        if (response.status === 503 || response.status === 429) {
-          console.warn(`[${model}] 서버 과부하 (${response.status}). 재시도 중... (${i + 1}/${retries})`);
-          await new Promise(res => setTimeout(res, 1000 * (i + 1)));
-          continue;
-        }
-
-        lastError = resultData.error?.message || 'Gemini API 호출 실패';
-        break; // 다른 400대/500대 에러는 재시도 없이 다음 모델로 이동
-      } catch (err) {
-        lastError = err.message;
-        await new Promise(res => setTimeout(res, 1000));
+      if (response.ok) {
+        return resultData;
       }
+
+      // 503(과부하) 또는 429(요청 과다) 시 대기 후 재시도
+      if (response.status === 503 || response.status === 429) {
+        console.warn(`서버 과부하 (${response.status}). 재시도 중... (${i + 1}/${retries})`);
+        await new Promise(res => setTimeout(res, 1500 * (i + 1)));
+        continue;
+      }
+
+      lastError = resultData.error?.message || 'Gemini API 호출 실패';
+      break;
+    } catch (err) {
+      lastError = err.message;
+      await new Promise(res => setTimeout(res, 1000));
     }
   }
 
-  throw new Error(lastError || '모든 Gemini 모델 응답 실패');
+  throw new Error(lastError || 'Gemini API 응답 실패');
 }
 
 // 📸 Gemini OCR 스캔 엔드포인트
