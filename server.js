@@ -10,7 +10,7 @@ app.use(express.json());
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-// 📸 Gemini REST API 스캔
+// 📸 Gemini REST API 스캔 (최신 모델 반영)
 app.post('/api/scan-contract', upload.single('contractImage'), async (req, res) => {
   try {
     if (!req.file) {
@@ -25,8 +25,8 @@ app.post('/api/scan-contract', upload.single('contractImage'), async (req, res) 
 
     const base64Image = req.file.buffer.toString('base64');
     
-    // v1beta 모델 주소 호출
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // 404 에러를 방지하는 최신 Gemini 2.5 Flash API 엔드포인트
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
     const prompt = `이 임대차 계약서 이미지에서 정밀한 정보를 추출해 JSON 형태로만 응답해줘. 
     마크다운 코드 블록(\`\`\`json 등)이나 기타 설명 텍스트 없이 오직 순수 JSON 객체만 반환해줘.
