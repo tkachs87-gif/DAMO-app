@@ -29,7 +29,7 @@ app.post('/api/scan-contract', upload.single('contractImage'), async (req, res) 
           content: [
             { 
               type: "text", 
-              text: "이 임대차 계약서 이미지에서 정밀한 정보를 추출해 JSON으로 응답해줘. Key: name (건물명 및 호실명), type (아파트/오피스텔/다가구/다세대 중 하나), tenant (임차인 이름), amount (월세 금액 숫자만, 원 단위), payDay (월세 지정일 숫자만)." 
+              text: "이 임대차 계약서 이미지에서 다음 정보를 추출해 JSON 형태로만 응답해줘. Key 목록: name (건물명 및 호실명), type (아파트/오피스텔/다가구/다세대 중 하나), tenant (임차인 이름), amount (월세 금액 숫자만, 원 단위), payDay (월세 지정일 숫자만)." 
             },
             {
               type: "image_url",
@@ -41,12 +41,15 @@ app.post('/api/scan-contract', upload.single('contractImage'), async (req, res) 
       response_format: { type: "json_object" }
     });
 
-    const parsedData = JSON.parse(response.choices[0].message.content);
+    const content = response.choices[0].message.content;
+    const parsedData = JSON.parse(content);
+
+    console.log("스캔 성공 데이터:", parsedData);
     res.json({ success: true, data: parsedData });
 
   } catch (error) {
-    console.error('OCR Error:', error);
-    res.status(500).json({ success: false, error: 'AI 분석 실패' });
+    console.error('OCR Error 상세:', error);
+    res.status(500).json({ success: false, error: error.message || 'AI 분석 실패' });
   }
 });
 
