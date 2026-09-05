@@ -10,10 +10,9 @@ app.use(express.json());
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-// 💡 503/429 과부하 대응 재시도 함수
+// 💡 503/429 과부하 대응 재시도 함수 (gemini-3.6-flash 적용)
 async function fetchGeminiWithRetry(apiKey, payload, retries = 3) {
-  // 현재 가용 가능한 무료 모델 주소
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
   let lastError;
 
   for (let i = 0; i < retries; i++) {
