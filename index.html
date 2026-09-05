@@ -4,12 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>다모 (DAMO) - 올인원 임대 케어</title>
-  <script src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f4f6f8; margin: 0; padding: 16px; color: #333; padding-bottom: 80px; }
     .header { font-size: 22px; font-weight: bold; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
     .card { background: white; border-radius: 14px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-    .ocr-card { background-color: #ebf8ff; border: 1px dashed #3182ce; text-align: center; cursor: pointer; }
+    .ocr-card { background-color: #ebf8ff; border: 1px dashed #3182ce; text-align: center; cursor: pointer; position: relative; }
     .badge-paid { background: #38a169; color: white; font-size: 11px; padding: 2px 6px; border-radius: 12px; font-weight: bold; }
     .badge-vacant { background: #e53e3e; color: white; font-size: 11px; padding: 2px 6px; border-radius: 12px; font-weight: bold; }
     .tag-type { background: #edf2f7; color: #4a5568; font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 4px; }
@@ -19,7 +18,8 @@
     .btn-clean { background-color: #319795; color: white; border: none; }
     .row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
     .empty-state { text-align: center; color: #a0aec0; padding: 30px 10px; font-size: 14px; }
-    
+    .loading-overlay { display: none; color: #3182ce; font-weight: bold; font-size: 14px; margin-top: 8px; }
+
     /* 하단 네비게이션 바 */
     .nav-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: white; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-around; padding: 14px 0; box-shadow: 0 -2px 10px rgba(0,0,0,0.08); z-index: 100; }
     .nav-item { text-align: center; font-size: 15px; color: #718096; cursor: pointer; font-weight: bold; }
@@ -41,6 +41,7 @@
   <div class="card ocr-card" onclick="triggerFileInput()">
     <div style="font-size: 16px; font-weight: bold; color: #2b6cb0;">📷 계약서 사진 찍어 1초 호실 등록</div>
     <div style="font-size: 12px; color: #4a5568; margin-top: 4px;">아파트, 오피스텔, 다세대, 다가구 (AI 스캔)</div>
+    <div id="loadingText" class="loading-overlay">⏳ AI가 계약서 글자를 분석 중입니다... (최초 시도 시 약 30초~1분 소요될 수 있습니다)</div>
     <input type="file" id="contractInput" accept="image/*" capture="environment" style="display: none;" onchange="processContract(event)">
   </div>
 
@@ -66,7 +67,6 @@
     <div class="card">
       <strong style="font-size: 16px; margin-bottom: 12px; display: block;">🏠 전체 물건 장부 목록</strong>
       <div id="roomListContainer">
-        <!-- 초기 빈 상태 표시 -->
         <div id="emptyState" class="empty-state">
           등록된 임대 호실이 없습니다.<br>상단의 계약서 스캔이나 수동 등록을 진행해 보세요!
         </div>
@@ -81,74 +81,88 @@
   </div>
 
   <script>
-    // 초기화 상태 데이터 (샘플 제거)
     let currentUnits = 0;
     let currentVacant = 0;
     let currentAmount = 0;
+
+    // 배포 완료된 Render 백엔드 API 서버 주소
+    const BACKEND_API_URL = 'https://damo-backend-ikgm.onrender.com/api/scan-contract';
 
     function triggerFileInput() {
       document.getElementById('contractInput').click();
     }
 
-    // 계약서 스캔 입력 처리
-    function processContract(event) {
-      if (event.target.files && event.target.files[0]) {
-        // AI 스캔 모의 추출 데이터
-        const scannedData = {
-          name: "평택 지제동 아파트 101동 402호",
-          type: "아파트",
-          amount: 700000,
-          payDay: 15,
-          tenant: "홍길동",
-          isVacant: false
-        };
+    // 📸 실제 AI OCR 백엔드 API 호출
+    async function processContract(event) {
+      const file = event.target.files[0];
+      if (!file) return;
 
-        alert(`📄 [AI OCR 계약서 스캔 완료]\n\n• 물건: ${scannedData.name}\n• 세입자: ${scannedData.tenant}\n• 월세: ${scannedData.amount.toLocaleString()}원 (매월 ${scannedData.payDay}일)\n\n장부에 자동 등록되었습니다!`);
+      const loadingText = document.getElementById('loadingText');
+      loadingText.style.display = 'block';
 
-        addRoomToDashboard(scannedData);
-        switchTab('rooms');
+      const formData = new FormData();
+      formData.append('contractImage', file);
+
+      try {
+        const response = await fetch(BACKEND_API_URL, {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await response.json();
+        loadingText.style.display = 'none';
+
+        if (result.success && result.data) {
+          const data = result.data;
+          alert(`📄 [AI OCR 스캔 완료]\n\n• 건물/호실: ${data.name || '미확인'}\n• 임차인: ${data.tenant || '미확인'}\n• 월세: ${Number(data.amount || 0).toLocaleString()}원 (매월 ${data.payDay || '-'}일)`);
+
+          addRoomToDashboard({
+            name: data.name || "스캔 등록 호실",
+            type: data.type || "다가구",
+            amount: parseInt(data.amount) || 0,
+            payDay: data.payDay || "10",
+            tenant: data.tenant || "임차인",
+            isVacant: false
+          });
+          switchTab('rooms');
+        } else {
+          alert('AI 계약서 인식에 실패했습니다. 사진이 선명한지 확인 후 다시 시도해 주세요.');
+        }
+      } catch (err) {
+        loadingText.style.display = 'none';
+        alert('서버 응답 시간이 초과되었거나 통신 오류가 발생했습니다.\n\n(Render 무료 서버가 잠든 상태일 수 있으니, 30초 후 다시 시도해 주세요!)');
       }
     }
 
-    // 수동으로 호실 직접 등록
     function addManualRoom() {
-      const name = prompt("건물 및 호실명을 입력하세요 (예: 동삭동 다가구 201호):");
+      const name = prompt("건물 및 호실명을 입력하세요 (예: 동삭동 다가구 402호):");
       if (!name) return;
 
-      const isVacantConfirm = confirm("현재 이 호실이 '공실' 상태인가요?\n(확인: 공실 / 취소: 세입자 있음)");
-      
-      let tenant = "공실";
-      let amount = 0;
-      let payDay = "-";
+      const isVacantConfirm = confirm("현재 이 호실이 '공실' 상태인가요?");
+      let tenant = "공실", amount = 0, payDay = "-";
 
       if (!isVacantConfirm) {
-        tenant = prompt("세입자 이름을 입력하세요:", "김철수") || "세입자";
-        const amountInput = prompt("월세 금액(원)을 입력하세요:", "500000");
+        tenant = prompt("세입자 이름을 입력하세요:", "김두영") || "김두영";
+        const amountInput = prompt("월세 금액(원)을 입력하세요:", "550000");
         amount = parseInt(amountInput) || 0;
-        payDay = prompt("매월 월세 지정일을 입력하세요 (예: 10):", "10") || "10";
+        payDay = prompt("지정일을 입력하세요:", "10") || "10";
       }
 
-      const roomData = {
+      addRoomToDashboard({
         name: name,
         type: "다가구",
         amount: amount,
         payDay: payDay,
         tenant: tenant,
         isVacant: isVacantConfirm
-      };
-
-      addRoomToDashboard(roomData);
-      alert(`${name} 등록이 완료되었습니다!`);
+      });
       switchTab('rooms');
     }
 
-    // 대시보드 및 장부 목록에 호실 추가 통합 함수
     function addRoomToDashboard(data) {
-      // 1. empty state 제거
       const emptyState = document.getElementById('emptyState');
       if (emptyState) emptyState.remove();
 
-      // 2. 카운트 및 수입 합계 업데이트
       currentUnits += 1;
       if (data.isVacant) {
         currentVacant += 1;
@@ -159,13 +173,11 @@
       document.getElementById('totalUnitsText').innerText = `${currentUnits} 세대 (공실 ${currentVacant})`;
       document.getElementById('totalAmountText').innerText = `${currentAmount.toLocaleString()} 원`;
 
-      // 3. 장부 리스트에 카드로 추가
       const container = document.getElementById('roomListContainer');
       const newItem = document.createElement('div');
       newItem.className = 'room-item';
 
       if (data.isVacant) {
-        // 공실 카드 (공실 알림 & 청소 수리 버튼 제공)
         newItem.innerHTML = `
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div><strong>${data.name}</strong> <span class="tag-type">${data.type}</span></div>
@@ -173,12 +185,11 @@
           </div>
           <div style="font-size: 12px; color: #e53e3e; margin-top: 4px;">현재 공실 상태 (세입자 구함 / 케어 필요)</div>
           <div class="action-group">
-            <button class="btn-action btn-notify" onclick="notifyVacant('${data.name}')">📢 소장님들께 공실 알리기</button>
-            <button class="btn-action btn-clean" onclick="requestCleaning('${data.name}')">🧹 퇴실 청소/수리 신청</button>
+            <button class="btn-action btn-notify" onclick="alert('📢 인근 부동산 소장님께 공실 배포 완료!')">📢 소장님들께 공실 알리기</button>
+            <button class="btn-action btn-clean" onclick="alert('🧹 퇴실 청소/수리 요청이 접수되었습니다.')">🧹 퇴실 청소/수리 신청</button>
           </div>
         `;
       } else {
-        // 임대 중 카드
         newItem.innerHTML = `
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div><strong>${data.name}</strong> <span class="tag-type">${data.type}</span></div>
@@ -191,31 +202,11 @@
       container.insertBefore(newItem, container.firstChild);
     }
 
-    function notifyVacant(roomName) {
-      alert(`📢 [공실 배포 완료]\n\n인근 제휴 부동산 소장님들에게 '${roomName}' 매물 정보와 임대 조건이 카카오톡으로 일괄 발송되었습니다!`);
-    }
-
-    function requestCleaning(roomName) {
-      alert(`🧹 [퇴실 청소/수리 신청]\n\n'${roomName}'의 작업 요청이 제휴 청소/수리 업체에 전달되었습니다.\n작업 완료 후 검수 사진이 본 카드로 자동 연동됩니다.`);
-    }
-
     function switchTab(tab) {
-      const homeTab = document.getElementById('tabHome');
-      const roomsTab = document.getElementById('tabRooms');
-      const navHome = document.getElementById('navHome');
-      const navRooms = document.getElementById('navRooms');
-
-      if (tab === 'home') {
-        homeTab.classList.add('active');
-        roomsTab.classList.remove('active');
-        navHome.classList.add('active');
-        navRooms.classList.remove('active');
-      } else {
-        homeTab.classList.remove('active');
-        roomsTab.classList.add('active');
-        navHome.classList.remove('active');
-        navRooms.classList.add('active');
-      }
+      document.getElementById('tabHome').classList.toggle('active', tab === 'home');
+      document.getElementById('tabRooms').classList.toggle('active', tab === 'rooms');
+      document.getElementById('navHome').classList.toggle('active', tab === 'home');
+      document.getElementById('navRooms').classList.toggle('active', tab === 'rooms');
     }
   </script>
 </body>
