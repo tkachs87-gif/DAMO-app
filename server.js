@@ -10,9 +10,9 @@ app.use(express.json());
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-// 💡 503/429 과부하 대응 재시도 함수 (gemini-3.6-flash 적용)
+// 💡 503/429 과부하 대응 재시도 함수
 async function fetchGeminiWithRetry(apiKey, payload, retries = 3) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
   let lastError;
 
   for (let i = 0; i < retries; i++) {
@@ -29,10 +29,9 @@ async function fetchGeminiWithRetry(apiKey, payload, retries = 3) {
         return resultData;
       }
 
-      // 503(과부하) 또는 429(요청 과다) 시 대기 후 재시도
       if (response.status === 503 || response.status === 429) {
         console.warn(`서버 과부하 (${response.status}). 재시도 중... (${i + 1}/${retries})`);
-        await new Promise(res => setTimeout(res, 1500 * (i + 1)));
+        await new Promise(res => setTimeout(res, 1000 * (i + 1)));
         continue;
       }
 
@@ -47,7 +46,7 @@ async function fetchGeminiWithRetry(apiKey, payload, retries = 3) {
   throw new Error(lastError || 'Gemini API 응답 실패');
 }
 
-// 📸 Gemini OCR 스캔 엔드포인트
+// 📸 Gemini OCR 스캔 엔드포인트 (중개사 정보 포함)
 app.post('/api/scan-contract', upload.single('contractImage'), async (req, res) => {
   try {
     if (!req.file) {
@@ -63,11 +62,13 @@ app.post('/api/scan-contract', upload.single('contractImage'), async (req, res) 
     const prompt = `이 임대차 계약서 이미지에서 정밀한 정보를 추출해 JSON 형태로만 응답해줘. 
     마크다운 코드 블록(\`\`\`json 등)이나 기타 설명 텍스트 없이 오직 순수 JSON 객체만 반환해줘.
     Key 목록:
-    - name: 건물명 및 호실명 (예: 동삭동 다가구 402호)
+    - name: 건물명 및 호실명 (예: 동삭동 골든캐슬 402호)
     - type: 아파트, 오피스텔, 다가구, 다세대 중 하나
     - tenant: 임차인 이름
     - amount: 월세 금액 (숫자만, 원 단위)
-    - payDay: 월세 지정일 (숫자만)`;
+    - payDay: 월세 지정일 (숫자만)
+    - agentName: 중개사무소명 또는 소장님 이름 (없으면 "")
+    - agentPhone: 중개사/소장님 연락처 (하이픈 포함 숫자, 없으면 "")`;
 
     const payload = {
       contents: [
